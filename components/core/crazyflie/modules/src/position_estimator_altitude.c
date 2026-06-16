@@ -61,7 +61,12 @@ static struct selfState_s state = {
   .estimatedZ = 0.0f,
   .velocityZ = 0.0f,
   .estAlphaZrange = 0.90f,
-  .estAlphaAsl = 0.997f,
+  // pyDrone: the SPL06 reads cleanly and quickly, but the original 0.997 (~3.3s
+  // time constant at 100Hz) made the fused z lag the baro by several seconds.
+  // 0.95 (~0.2s) tracks the baro fast. Tune live via posEstAlt.estAlphaAsl:
+  // raise it (toward 0.99) if flight altitude is jittery from prop wash,
+  // lower it if altitude response feels laggy.
+  .estAlphaAsl = 0.95f,
   .velocityFactor = 1.0f,
   .vAccDeadband = 0.04f,
   .velZAlpha = 0.995f,

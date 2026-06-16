@@ -32,6 +32,8 @@
 #include "param.h"
 #include "num.h"
 #include "position_estimator.h"
+#define DEBUG_MODULE "POSEST"
+#include "debug_cf.h"
 
 #define G 9.81f;
 
@@ -92,9 +94,11 @@ void positionEstimatorAltitudeSetHoldEngaged(bool engaged) {
     state.estimatedZ = 0.0f;
     state.velocityZ = 0.0f;
     state.aslRef = state.lastAsl;
+    DEBUG_PRINTI("ALT-HOLD engaged: zero here (aslRef=%.2f), acc-climb start", (double)state.aslRef);
   } else if (!engaged && state.holdEngaged) {
     state.holdEngaged = false;
     state.accClimbMode = false;
+    DEBUG_PRINTI("ALT-HOLD disengaged");
   }
 }
 

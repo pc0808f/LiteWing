@@ -113,7 +113,11 @@ void controllerPid(control_t *control, setpoint_t *setpoint,
                                         &control->pitch,
                                         &control->yaw);
 
-    control->yaw = -control->yaw;
+    // pyDrone: motor spin directions produce the opposite yaw reaction torque
+    // compared to the ESP-Drone reference board, so the reference's yaw output
+    // negation makes yaw a positive-feedback loop (drone spins up / runs away).
+    // Removing the extra negation makes yaw hold. (Was: control->yaw = -control->yaw;)
+    // control->yaw = -control->yaw;
 
     cmd_thrust = control->thrust;
     cmd_roll = control->roll;

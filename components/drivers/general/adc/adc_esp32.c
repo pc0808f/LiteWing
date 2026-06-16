@@ -41,7 +41,9 @@ static const adc_channel_t channel = ADC_CHANNEL_1;     // GPIO2 if ADC1
 #endif
 
 static const adc_bits_width_t width = ADC_WIDTH_MAX-1;
-static const adc_atten_t atten = 3; // we directly set the attenuation to 3(11dB/12dB) to avoid the build warning
+// pyDrone divides VBAT by ~5 (R4 40.2k / R7 10k), so 4.2V -> ~0.84V at the ADC pin.
+// Use 0dB attenuation (ADC_ATTEN_DB_0, ~0-0.95V range) for best resolution at that level.
+static const adc_atten_t atten = 0; // 0dB
 static const adc_unit_t unit = ADC_UNIT_1;
 #define DEFAULT_VREF 1100 //Use adc2_vref_to_gpio() to obtain a better estimate
 #define NO_OF_SAMPLES   30          //Multisampling

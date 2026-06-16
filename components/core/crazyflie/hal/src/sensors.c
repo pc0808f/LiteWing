@@ -56,6 +56,10 @@
 #include "sensors_mpu6050_hm5883L_ms5611.h"
 #endif
 
+#ifdef SENSOR_INCLUDED_MPU6050_SPL06
+#include "sensors_mpu6050_spl06.h"
+#endif
+
 typedef struct {
   SensorImplementation_t implements;
   void (*init)(void);
@@ -127,7 +131,24 @@ static const sensorsImplementation_t sensorImplementations[SensorImplementation_
     .readBaro = sensorsMpu6050Hmc5883lMs5611ReadBaro,
     .setAccMode = sensorsMpu6050Hmc5883lMs5611SetAccMode,
     .dataAvailableCallback = nullFunction,
-  }
+  },
+#endif
+#ifdef SENSOR_INCLUDED_MPU6050_SPL06
+  {
+    .implements = SensorImplementation_mpu6050_SPL06,
+    .init = sensorsMpu6050Spl06Init,
+    .test = sensorsMpu6050Spl06Test,
+    .areCalibrated = sensorsMpu6050Spl06AreCalibrated,
+    .manufacturingTest = sensorsMpu6050Spl06ManufacturingTest,
+    .acquire = sensorsMpu6050Spl06Acquire,
+    .waitDataReady = sensorsMpu6050Spl06WaitDataReady,
+    .readGyro = sensorsMpu6050Spl06ReadGyro,
+    .readAcc = sensorsMpu6050Spl06ReadAcc,
+    .readMag = sensorsMpu6050Spl06ReadMag,
+    .readBaro = sensorsMpu6050Spl06ReadBaro,
+    .setAccMode = sensorsMpu6050Spl06SetAccMode,
+    .dataAvailableCallback = nullFunction,
+  },
 #endif
 #ifdef SENSOR_INCLUDED_MPU9250_LPS25H
   {

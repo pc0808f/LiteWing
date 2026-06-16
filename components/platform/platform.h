@@ -28,7 +28,9 @@
 
 #define PLATFORM_DEVICE_TYPE_STRING_MAX_LEN (32 + 1)
 #define PLATFORM_DEVICE_TYPE_MAX_LEN (4 + 1)
-#define SENSOR_INCLUDED_MPU6050_HMC5883L_MS5611
+// pyDrone build: MPU6050 + SPL06 barometer. The original MPU6050+HMC5883L+MS5611
+// implementation is kept in the tree but not built (see core/crazyflie/CMakeLists.txt).
+#define SENSOR_INCLUDED_MPU6050_SPL06
 
 typedef enum {
 #ifdef SENSOR_INCLUDED_BMI088_BMP388
@@ -45,6 +47,10 @@ typedef enum {
 
 #ifdef SENSOR_INCLUDED_MPU6050_HMC5883L_MS5611
     SensorImplementation_mpu6050_HMC5883L_MS5611,
+#endif
+
+#ifdef SENSOR_INCLUDED_MPU6050_SPL06
+    SensorImplementation_mpu6050_SPL06,
 #endif
 
 #ifdef SENSOR_INCLUDED_BOSCH

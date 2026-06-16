@@ -117,7 +117,8 @@ void pmInit(void)
     return;
   }
 
-    pmEnableExtBatteryVoltMeasuring(CONFIG_ADC1_PIN, 2); // ADC1 PIN is fixed to ADC channel
+    // pyDrone voltage divider R4 40.2k / R7 10k -> multiplier (40.2+10)/10 = 5.02
+    pmEnableExtBatteryVoltMeasuring(CONFIG_ADC1_PIN, 5); // ADC1 PIN is fixed to ADC channel
 
     pmSyslinkInfo.pgood = false;
     pmSyslinkInfo.chg = false;

@@ -217,6 +217,12 @@ bool sensorsAreCalibrated(void) {
   return activeImplementation->areCalibrated();
 }
 
+void sensorsReCalibrate(void) {
+#ifdef SENSOR_INCLUDED_MPU6050_SPL06
+  sensorsMpu6050Spl06ReCalibrate();
+#endif
+}
+
 bool sensorsManufacturingTest(void){
   return activeImplementation->manufacturingTest;
 }

@@ -236,6 +236,17 @@ bool sensorsMpu6050Spl06AreCalibrated()
     return gyroBiasFound;
 }
 
+// Re-run gyro-bias calibration in the field (e.g. triggered by a stick gesture
+// while on the ground). Clears the running bias state; processGyroBias() then
+// re-finds the bias automatically once the craft is still (low variance).
+void sensorsMpu6050Spl06ReCalibrate(void)
+{
+    sensorsBiasObjInit(&gyroBiasRunning);
+    gyroBiasRunning.isBiasValueFound = false;
+    gyroBiasFound = false;
+    DEBUG_PRINTI("Gyro re-calibration requested (hold still)");
+}
+
 static void sensorsTask(void *param)
 {
     systemWaitStart();

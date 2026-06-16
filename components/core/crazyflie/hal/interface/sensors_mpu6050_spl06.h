@@ -42,5 +42,6 @@ bool sensorsMpu6050Spl06ReadAcc(Axis3f *acc);
 bool sensorsMpu6050Spl06ReadMag(Axis3f *mag);
 bool sensorsMpu6050Spl06ReadBaro(baro_t *baro);
 void sensorsMpu6050Spl06SetAccMode(accModes accMode);
+void sensorsMpu6050Spl06ReCalibrate(void);
 
 #endif // __SENSORS_MPU6050_SPL06_H__

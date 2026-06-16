@@ -35,6 +35,8 @@
 #include "FreeRTOS.h"
 #include "num.h"
 #include "stm32_legacy.h"
+#include "sensors.h"
+#include "stabilizer.h"
 #define DEBUG_MODULE "MODE"
 #include "debug_cf.h"
 
@@ -159,9 +161,30 @@ static void yawModeUpdate(setpoint_t *setpoint)
   }
 }
 
+// Stick-gesture (roll left ~-30, yaw right ~50, throttle 0) held ~1.5s while on
+// the ground: re-calibrate the gyro AND clear a tumble lockout (emergencyStop).
+// Only possible at zero thrust, so it can never fire in flight.
+#define RECAL_YAW_MIN   40.0f    // yaw ~ +50 deg
+#define RECAL_ROLL_MAX  (-25.0f) // roll ~ -30 deg
+#define RECAL_HOLD_PKTS 150      // ~1.5s at the ~100Hz command rate
+
 void crtpCommanderRpytDecodeSetpoint(setpoint_t *setpoint, CRTPPacket *pk)
 {
   struct CommanderCrtpLegacyValues *values = (struct CommanderCrtpLegacyValues*)pk->data;
+
+  // Ground recalibration / unlock gesture
+  static uint16_t recalCount = 0;
+  static bool recalLatched = false;
+  if (values->thrust == 0 && values->yaw > RECAL_YAW_MIN && values->roll < RECAL_ROLL_MAX) {
+    if (!recalLatched && ++recalCount >= RECAL_HOLD_PKTS) {
+      sensorsReCalibrate();          // re-zero gyro bias
+      stabilizerResetEmergencyStop(); // clear tumble lockout (recover without reboot)
+      recalLatched = true;           // one-shot: release the gesture to re-arm it
+    }
+  } else {
+    recalCount = 0;
+    recalLatched = false;
+  }
 
   if (commanderGetActivePriority() == COMMANDER_PRIORITY_DISABLE) {
     thrustLocked = true;

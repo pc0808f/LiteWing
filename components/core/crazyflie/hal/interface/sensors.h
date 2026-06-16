@@ -33,6 +33,7 @@ typedef enum { ACC_MODE_PROPTEST, ACC_MODE_FLIGHT } accModes;
 void sensorsInit(void);
 bool sensorsTest(void);
 bool sensorsAreCalibrated(void);
+void sensorsReCalibrate(void);
 
 /**
  * More extensive test of the sensors

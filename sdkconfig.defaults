@@ -35,6 +35,10 @@ CONFIG_MOTOR04_PIN=41
 # Sensor I2C bus (MPU6050; SPL06 sits behind it on the aux bus)
 CONFIG_I2C0_PIN_SDA=16
 CONFIG_I2C0_PIN_SCL=15
+# Deck/aux I2C bus (I2C1). Default was GPIO40/41 which COLLIDES with motors M3/M4!
+# Move it to pyDrone's deck bus pins (GPIO1/6) so M3/M4 PWM works.
+CONFIG_I2C1_PIN_SDA=6
+CONFIG_I2C1_PIN_SCL=1
 # MPU6050 data-ready interrupt
 CONFIG_MPU_PIN_INT=7
 # Battery voltage ADC stays on GPIO2 (= ADC1 channel, default), divider handled in pm_esplane.c

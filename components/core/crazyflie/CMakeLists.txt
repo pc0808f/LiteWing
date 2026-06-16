@@ -77,6 +77,7 @@ target_include_directories(${COMPONENT_TARGET} PUBLIC
 )
 target_compile_options(${COMPONENT_LIB} PRIVATE "-fno-strict-aliasing"
                                                 "-Wno-error=stringop-truncation"
+                                                "-Wno-error=stringop-overflow"
                                                 "-Wno-absolute-value"
                                                 "-Wno-address-of-packed-member"
                                                 "-Wno-stringop-truncation"

@@ -740,6 +740,11 @@ void logRunBlock(void * arg)
 
     // FPU instructions must run on aligned data.
     // We first copy the data to an (aligned) local variable, before assigning it
+    // Guard: a malformed log block (e.g. a stale client TOC) can reference a NULL
+    // variable address. Reading it panics the flight controller, so treat a NULL
+    // direct-memory variable as 0 instead of dereferencing it.
+    if (ops->acquisitionType == acqType_function || ops->variable != NULL)
+    {
     switch(ops->storageType)
     {
       case LOG_UINT8:
@@ -828,6 +833,7 @@ void logRunBlock(void * arg)
         break;
       }
     }
+    } // end NULL-variable guard
 
     if (ops->logType == LOG_FLOAT || ops->logType == LOG_FP16)
     {

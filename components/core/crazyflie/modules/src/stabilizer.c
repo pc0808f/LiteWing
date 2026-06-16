@@ -294,14 +294,6 @@ static void stabilizerTask(void* param)
       stateEstimator(&state, &sensorData, &control, tick);
       compressState();
 
-      // --- TEMP pyDrone IMU axis check (~2Hz). Rotate each axis, read the signs. ---
-      if ((tick % 500) == 0) {
-        DEBUG_PRINTI("AXIS gyro[%.1f %.1f %.1f] acc[%.2f %.2f %.2f] att[r=%.1f p=%.1f y=%.1f]",
-            (double)sensorData.gyro.x, (double)sensorData.gyro.y, (double)sensorData.gyro.z,
-            (double)sensorData.acc.x, (double)sensorData.acc.y, (double)sensorData.acc.z,
-            (double)state.attitude.roll, (double)state.attitude.pitch, (double)state.attitude.yaw);
-      }
-
       commanderGetSetpoint(&setpoint, &state);
       compressSetpoint();
 

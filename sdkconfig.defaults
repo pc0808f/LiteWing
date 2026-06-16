@@ -19,6 +19,8 @@ CONFIG_COMPILER_STACK_CHECK_MODE_NONE=y
 CONFIG_FREERTOS_TIMER_TASK_STACK_DEPTH=4096
 CONFIG_ESPTOOLPY_FLASHMODE_QIO=y
 CONFIG_ESPTOOLPY_FLASHFREQ_80M=y
+CONFIG_ESPTOOLPY_FLASHSIZE_8MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="8MB"
 
 CONFIG_FREERTOS_VTASKLIST_INCLUDE_COREID=y
 CONFIG_FREERTOS_USE_TRACE_FACILITY=y
@@ -36,3 +38,9 @@ CONFIG_I2C0_PIN_SCL=15
 # MPU6050 data-ready interrupt
 CONFIG_MPU_PIN_INT=7
 # Battery voltage ADC stays on GPIO2 (= ADC1 channel, default), divider handled in pm_esplane.c
+# Status LEDs (active high): blue = system/link-down/calibrating, green = link up.
+# pyDrone has no MCU-controlled red LED (red/yellow are HW power/charge), so park
+# LED_PIN_RED on GPIO21 (P2 header only, no onboard peripheral) to avoid conflicts.
+CONFIG_LED_PIN_BLUE=46
+CONFIG_LED_PIN_GREEN=42
+CONFIG_LED_PIN_RED=21

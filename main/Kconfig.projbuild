@@ -262,7 +262,7 @@ menu "ESPDrone Config"
             default 18 if TARGET_ESPLANE_V1
             range 0 43 if TARGET_ESPLANE_V2_S2
             default 7 if TARGET_ESPLANE_V2_S2
-            range 0 43 if TARGET_ESP32_S2_DRONE_V1_2
+            range 0 48 if TARGET_ESP32_S2_DRONE_V1_2
             default 9 if TARGET_ESP32_S2_DRONE_V1_2
             help
                 GPIO number (IOxx) LED_PIN_BLUE

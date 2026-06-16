@@ -294,6 +294,13 @@ static void stabilizerTask(void* param)
       stateEstimator(&state, &sensorData, &control, tick);
       compressState();
 
+      // TEMP altitude readout on serial: verify on the ground by lifting by hand
+      // (z and baroAsl should track height), and monitor during flight.
+      if ((tick % 500) == 0) {
+        DEBUG_PRINTI("ALT z=%.2f baroAsl=%.2f vz=%.2f", (double)state.position.z,
+                     (double)sensorData.baro.asl, (double)state.velocity.z);
+      }
+
       commanderGetSetpoint(&setpoint, &state);
       compressSetpoint();
 

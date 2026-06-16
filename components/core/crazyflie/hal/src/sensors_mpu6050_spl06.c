@@ -295,10 +295,23 @@ void sensorsMpu6050Spl06WaitDataReady(void)
  * buffer[1..3]    = pressure  MSB,LSB,XLSB     (slave 3)
  * buffer[4..6]    = temperature MSB,LSB,XLSB   (slave 3)
  */
+// Ground reference for relative altitude. The SPL06 gives absolute altitude
+// above sea level (~tens of metres); we capture the ground level at startup and
+// report height RELATIVE to it, so baro.asl (and the z estimate) is ~0 on the
+// ground. Write baro.reZero = 1 (e.g. from the client) to re-capture ground level.
+static float baroAslZero = 0.0f;   // captured ground altitude (m ASL)
+static uint8_t baroReZero = 0;     // write 1 to re-zero on the ground
+#define BARO_ZERO_SETTLE_SAMPLES 1000  // discard while the sensor settles
+#define BARO_ZERO_AVG_SAMPLES    1000  // then average this many for ground level
+
 void processBarometerMeasurements(const uint8_t *buffer)
 {
     static float temp;
     static float pressure;
+    static bool aslZeroed = false;
+    static uint16_t settleCount = 0;
+    static uint16_t avgCount = 0;
+    static float avgAccum = 0.0f;
 
     if (!isBarometerPresent) {
         return;
@@ -313,9 +326,34 @@ void processBarometerMeasurements(const uint8_t *buffer)
     temp = spl0601_get_temperature(rawTemp);
     pressure = spl0601_get_pressure(rawPressure, rawTemp);
 
+    float aslRaw = SPL06PressureToAltitude(pressure / 100.0f); /* absolute, m ASL */
+
+    // Allow an on-demand re-zero (drone must be on the ground / still).
+    if (baroReZero) {
+        aslZeroed = false;
+        settleCount = 0;
+        avgCount = 0;
+        avgAccum = 0.0f;
+        baroReZero = 0;
+    }
+
+    if (!aslZeroed) {
+        if (settleCount < BARO_ZERO_SETTLE_SAMPLES) {
+            settleCount++;
+        } else if (avgCount < BARO_ZERO_AVG_SAMPLES) {
+            avgAccum += aslRaw;
+            avgCount++;
+        } else {
+            baroAslZero = avgAccum / (float)avgCount;
+            aslZeroed = true;
+        }
+        sensorData.baro.asl = 0.0f;            /* on the ground -> 0 until zeroed */
+    } else {
+        sensorData.baro.asl = aslRaw - baroAslZero; /* height above ground (m) */
+    }
+
     sensorData.baro.pressure = pressure / 100.0f;          /* hPa */
     sensorData.baro.temperature = (float)temp;             /* deg C */
-    sensorData.baro.asl = SPL06PressureToAltitude(sensorData.baro.pressure); /* m */
 }
 
 void processMagnetometerMeasurements(const uint8_t *buffer)
@@ -979,6 +1017,11 @@ PARAM_GROUP_START(imu_sensors)
 PARAM_ADD(PARAM_UINT8 | PARAM_RONLY, HMC5883L, &isMagnetometerPresent)
 PARAM_ADD(PARAM_UINT8 | PARAM_RONLY, SPL06, &isBarometerPresent)
 PARAM_GROUP_STOP(imu_sensors)
+
+PARAM_GROUP_START(baro)
+PARAM_ADD(PARAM_FLOAT | PARAM_RONLY, aslZero, &baroAslZero)
+PARAM_ADD(PARAM_UINT8, reZero, &baroReZero)
+PARAM_GROUP_STOP(baro)
 
 PARAM_GROUP_START(imu_tests)
 PARAM_ADD(PARAM_UINT8 | PARAM_RONLY, mpu6050, &isMpu6050TestPassed)

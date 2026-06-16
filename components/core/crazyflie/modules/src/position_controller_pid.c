@@ -75,7 +75,7 @@ static float rpLimit  = 20;
 static float rpLimitOverhead = 1.10f;
 // Velocity maximums
 static float xyVelMax = 1.0f;
-static float zVelMax  = 1.0f;
+static float zVelMax  = 0.5f;  // pyDrone: slower climb/descent -> less altitude overshoot
 static float velMaxOverhead = 1.10f;
 static const float thrustScale = 1000.0f;
 
@@ -106,7 +106,7 @@ static struct this_s this = {
   .pidVZ = {
     .init = {
       .kp = 22,
-      .ki = 15,
+      .ki = 6,   // pyDrone: lowered from 15 to reduce integral windup / altitude oscillation
       .kd = 0,
     },
     .pid.dt = DT,
@@ -132,7 +132,7 @@ static struct this_s this = {
 
   .pidZ = {
     .init = {
-      .kp = 1.6f,
+      .kp = 1.0f,   // pyDrone: lowered from 1.6 -> gentler altitude correction, less overshoot
       .ki = 0.5,
       .kd = 0,
     },

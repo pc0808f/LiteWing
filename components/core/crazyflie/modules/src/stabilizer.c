@@ -60,6 +60,12 @@ static bool isInit;
 static bool emergencyStop = false;
 static int emergencyStopTimeout = EMERGENCY_STOP_TIMEOUT_DISABLED;
 
+// Altitude-hold tuning aid (settable from cfclient). When altHoldTest != 0 the
+// stabilizer forces position-hold at altHoldTestZ metres so altitude hold can be
+// engaged and tuned live without depending on the commander/app setpoint path.
+static uint8_t altHoldTest = 0;
+static float altHoldTestZ = 0.3f;
+
 static bool checkStops;
 
 #define PROPTEST_NBR_OF_VARIANCE_VALUES   100
@@ -303,6 +309,16 @@ static void stabilizerTask(void* param)
 
       commanderGetSetpoint(&setpoint, &state);
       compressSetpoint();
+
+      // Altitude-hold tuning aid: force position-hold at altHoldTestZ when the
+      // altHoldTest param is set. Lets you engage altitude hold from cfclient
+      // (which otherwise can't trigger it) to tune live with the Plotter — the FC
+      // controls thrust to hold the height, you steer roll/pitch/yaw manually.
+      // Only z is overridden; arms required, so it won't fly unexpectedly.
+      if (altHoldTest) {
+        setpoint.mode.z = modeAbs;
+        setpoint.position.z = altHoldTestZ;
+      }
 
       // Altitude-hold engage detection: when the z setpoint mode becomes active
       // (zDistance / hover), zero the height here and dead-reckon the climb from
@@ -576,6 +592,11 @@ PARAM_ADD(PARAM_UINT8, estimator, &estimatorType)
 PARAM_ADD(PARAM_UINT8, controller, &controllerType)
 PARAM_ADD(PARAM_UINT8, stop, &emergencyStop)
 PARAM_GROUP_STOP(stabilizer)
+
+PARAM_GROUP_START(altTest)
+PARAM_ADD(PARAM_UINT8, hold, &altHoldTest)
+PARAM_ADD(PARAM_FLOAT, z, &altHoldTestZ)
+PARAM_GROUP_STOP(altTest)
 
 LOG_GROUP_START(health)
 LOG_ADD(LOG_FLOAT, motorVarXM1, &accVarX[0])

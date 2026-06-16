@@ -47,6 +47,7 @@
 //#include "collision_avoidance.h"
 
 #include "estimator.h"
+#include "position_estimator.h"
 //#include "usddeck.h" //usddeckLoggingMode_e
 #include "quatcompress.h"
 #include "statsCnt.h"
@@ -303,6 +304,12 @@ static void stabilizerTask(void* param)
 
       commanderGetSetpoint(&setpoint, &state);
       compressSetpoint();
+
+      // Altitude-hold engage detection: when the z setpoint mode becomes active
+      // (zDistance / hover), zero the height here and dead-reckon the climb from
+      // the accelerometer until past the baro handoff height (pyDrone baro is
+      // disturbed by prop wash near the ground).
+      positionEstimatorAltitudeSetHoldEngaged(setpoint.mode.z != modeDisable);
 
       sitAwUpdateSetpoint(&setpoint, &sensorData, &state);
       //collisionAvoidanceUpdateSetpoint(&setpoint, &sensorData, &state, tick);

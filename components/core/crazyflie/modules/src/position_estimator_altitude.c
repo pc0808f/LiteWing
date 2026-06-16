@@ -44,6 +44,15 @@ struct selfState_s {
   float vAccDeadband; // Vertical acceleration deadband
   float velZAlpha;   // Blending factor to avoid vertical speed to accumulate error
   float estimatedVZ;
+  // pyDrone altitude-hold handling: the SPL06 sits on the PCB top and its reading
+  // is corrupted by prop wash at low altitude. When altitude-hold is engaged we
+  // treat the current position as 0 and dead-reckon height from the accelerometer
+  // until we climb past baroHandoffM, then hand over to the (now reliable) baro.
+  float lastAsl;       // most recent baro asl (m), used to capture the reference
+  float aslRef;        // baro reference captured at engage / handoff (m)
+  float baroHandoffM;  // climb height at which we switch acc -> baro (m)
+  bool  holdEngaged;   // altitude-hold currently engaged
+  bool  accClimbMode;  // dead-reckoning the initial climb from the accelerometer
 };
 
 static struct selfState_s state = {
@@ -55,6 +64,11 @@ static struct selfState_s state = {
   .vAccDeadband = 0.04f,
   .velZAlpha = 0.995f,
   .estimatedVZ = 0.0f,
+  .lastAsl = 0.0f,
+  .aslRef = 0.0f,
+  .baroHandoffM = 0.6f,
+  .holdEngaged = false,
+  .accClimbMode = false,
 };
 
 static void positionEstimateInternal(state_t* estimate, const sensorData_t* sensorData, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick, struct selfState_s* state);
@@ -66,6 +80,22 @@ void positionEstimate(state_t* estimate, const sensorData_t* sensorData, const t
 
 void positionUpdateVelocity(float accWZ, float dt) {
   positionUpdateVelocityInternal(accWZ, dt, &state);
+}
+
+// Called when altitude-hold is engaged/disengaged (z setpoint mode active or not).
+// On the engage edge: treat the current position as 0 and start dead-reckoning the
+// climb from the accelerometer (the baro is unreliable near the ground).
+void positionEstimatorAltitudeSetHoldEngaged(bool engaged) {
+  if (engaged && !state.holdEngaged) {
+    state.holdEngaged = true;
+    state.accClimbMode = true;
+    state.estimatedZ = 0.0f;
+    state.velocityZ = 0.0f;
+    state.aslRef = state.lastAsl;
+  } else if (!engaged && state.holdEngaged) {
+    state.holdEngaged = false;
+    state.accClimbMode = false;
+  }
 }
 
 static void positionEstimateInternal(state_t* estimate, const sensorData_t* sensorData, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick, struct selfState_s* state) {
@@ -91,16 +121,34 @@ static void positionEstimateInternal(state_t* estimate, const sensorData_t* sens
       state->estimatedZ = filteredZ + (state->velocityFactor * state->velocityZ * dt);
     }
   } else {
-    // FIXME: A bit of an hack to init IIR filter
-    if (state->estimatedZ == 0.0f) {
-      filteredZ = sensorData->baro.asl;
+    state->lastAsl = sensorData->baro.asl;
+
+    if (!state->holdEngaged) {
+      // Not in altitude-hold: just track baro for display (not used for control).
+      // FIXME: A bit of an hack to init IIR filter
+      if (state->estimatedZ == 0.0f) {
+        filteredZ = sensorData->baro.asl;
+      } else {
+        // IIR filter asl
+        filteredZ = (state->estAlphaAsl       ) * state->estimatedZ +
+                    (1.0f - state->estAlphaAsl) * sensorData->baro.asl;
+      }
+      state->estimatedZ = filteredZ + (state->velocityFactor * state->velocityZ * dt);
+    } else if (state->accClimbMode) {
+      // Engaged + low altitude: baro corrupted by prop wash, dead-reckon from acc.
+      state->estimatedZ = state->estimatedZ + (state->velocityFactor * state->velocityZ * dt);
+      if (state->estimatedZ >= state->baroHandoffM) {
+        // Hand over to baro without a step: reference it to the current estimate.
+        state->accClimbMode = false;
+        state->aslRef = sensorData->baro.asl - state->estimatedZ;
+      }
     } else {
-      // IIR filter asl
+      // Engaged + above handoff: baro relative to the engage reference + acc velocity.
+      float baroRel = sensorData->baro.asl - state->aslRef;
       filteredZ = (state->estAlphaAsl       ) * state->estimatedZ +
-                  (1.0f - state->estAlphaAsl) * sensorData->baro.asl;
+                  (1.0f - state->estAlphaAsl) * baroRel;
+      state->estimatedZ = filteredZ + (state->velocityFactor * state->velocityZ * dt);
     }
-    // Use asl as base and add velocity changes.
-    state->estimatedZ = filteredZ + (state->velocityFactor * state->velocityZ * dt);
   }
 
   estimate->position.x = 0.0f;
@@ -120,6 +168,8 @@ LOG_GROUP_START(posEstAlt)
 LOG_ADD(LOG_FLOAT, estimatedZ, &state.estimatedZ)
 LOG_ADD(LOG_FLOAT, estVZ, &state.estimatedVZ)
 LOG_ADD(LOG_FLOAT, velocityZ, &state.velocityZ)
+LOG_ADD(LOG_UINT8, accClimb, &state.accClimbMode)
+LOG_ADD(LOG_UINT8, holdEng, &state.holdEngaged)
 LOG_GROUP_STOP(posEstAlt)
 
 PARAM_GROUP_START(posEstAlt)
@@ -128,4 +178,5 @@ PARAM_ADD(PARAM_FLOAT, estAlphaZr, &state.estAlphaZrange)
 PARAM_ADD(PARAM_FLOAT, velFactor, &state.velocityFactor)
 PARAM_ADD(PARAM_FLOAT, velZAlpha, &state.velZAlpha)
 PARAM_ADD(PARAM_FLOAT, vAccDeadband, &state.vAccDeadband)
+PARAM_ADD(PARAM_FLOAT, baroHandoffM, &state.baroHandoffM)
 PARAM_GROUP_STOP(posEstAlt)

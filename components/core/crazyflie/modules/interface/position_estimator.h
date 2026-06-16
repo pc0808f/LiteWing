@@ -30,5 +30,6 @@
 
 void positionEstimate(state_t* estimate, const sensorData_t* sensorData, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick);
 void positionUpdateVelocity(float accWZ, float dt);
+void positionEstimatorAltitudeSetHoldEngaged(bool engaged);
 
 #endif /* POSITION_ESTIMATOR_H_ */

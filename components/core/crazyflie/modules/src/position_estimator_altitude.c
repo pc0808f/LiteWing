@@ -89,12 +89,14 @@ void positionUpdateVelocity(float accWZ, float dt) {
 // climb from the accelerometer (the baro is unreliable near the ground).
 void positionEstimatorAltitudeSetHoldEngaged(bool engaged) {
   if (engaged && !state.holdEngaged) {
+    // Treat the current position as 0 and start the complementary altitude
+    // filter from there (baro referenced to this point + acc velocity).
     state.holdEngaged = true;
-    state.accClimbMode = true;
+    state.accClimbMode = false;
     state.estimatedZ = 0.0f;
     state.velocityZ = 0.0f;
     state.aslRef = state.lastAsl;
-    DEBUG_PRINTI("ALT-HOLD engaged: zero here (aslRef=%.2f), acc-climb start", (double)state.aslRef);
+    DEBUG_PRINTI("ALT-HOLD engaged: zero here (aslRef=%.2f)", (double)state.aslRef);
   } else if (!engaged && state.holdEngaged) {
     state.holdEngaged = false;
     state.accClimbMode = false;
@@ -138,20 +140,20 @@ static void positionEstimateInternal(state_t* estimate, const sensorData_t* sens
                     (1.0f - state->estAlphaAsl) * sensorData->baro.asl;
       }
       state->estimatedZ = filteredZ + (state->velocityFactor * state->velocityZ * dt);
-    } else if (state->accClimbMode) {
-      // Engaged + low altitude: baro corrupted by prop wash, dead-reckon from acc.
-      state->estimatedZ = state->estimatedZ + (state->velocityFactor * state->velocityZ * dt);
-      if (state->estimatedZ >= state->baroHandoffM) {
-        // Hand over to baro without a step: reference it to the current estimate.
-        state->accClimbMode = false;
-        state->aslRef = sensorData->baro.asl - state->estimatedZ;
-      }
     } else {
-      // Engaged + above handoff: baro relative to the engage reference + acc velocity.
+      // Engaged: hold altitude RELATIVE to the engage point. Complementary filter:
+      // baro (referenced to the engage altitude) gives the absolute reference, acc
+      // velocity gives the fast response. The heavy IIR smooths prop-wash noise.
+      //
+      // NOTE: pure accelerometer dead-reckoning for the initial climb was tried but
+      // it stalls on a steady climb (acc ~= 0, leaky integrator decays the velocity,
+      // no absolute reference) so the estimate never rises and the craft climbs away
+      // to the ceiling. Keeping the baro in the loop avoids that.
       float baroRel = sensorData->baro.asl - state->aslRef;
       filteredZ = (state->estAlphaAsl       ) * state->estimatedZ +
                   (1.0f - state->estAlphaAsl) * baroRel;
       state->estimatedZ = filteredZ + (state->velocityFactor * state->velocityZ * dt);
+      state->accClimbMode = false;
     }
   }
 

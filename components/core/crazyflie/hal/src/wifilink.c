@@ -156,7 +156,15 @@ static void wifilinkTask(void *param)
 static int wifilinkReceiveCRTPPacket(CRTPPacket *p)
 {
     if (xQueueReceive(crtpPacketDelivery, p, M2T(100)) == pdTRUE) {
-        ledseqRun(&seq_linkUp);
+        // Throttle the link-activity LED. Running a LED sequence on EVERY packet
+        // floods the FreeRTOS timer service under heavy traffic (cfclient TOC
+        // download / high-rate logging) and starves the idle task -> task watchdog.
+        static uint32_t lastBlinkUp = 0;
+        uint32_t now = xTaskGetTickCount();
+        if (now - lastBlinkUp > M2T(250)) {
+            ledseqRun(&seq_linkUp);
+            lastBlinkUp = now;
+        }
         return 0;
     }
 
@@ -166,7 +174,12 @@ static int wifilinkReceiveCRTPPacket(CRTPPacket *p)
 static int wifilinkSendPacket(CRTPPacket *p)
 {
     ASSERT(p->size <= CRTP_MAX_DATA_SIZE);
-    ledseqRun(&seq_linkDown);
+    static uint32_t lastBlinkDown = 0;
+    uint32_t now = xTaskGetTickCount();
+    if (now - lastBlinkDown > M2T(250)) {
+        ledseqRun(&seq_linkDown);
+        lastBlinkDown = now;
+    }
     return wifiSendData(p->size + 1, p->raw);
 }
 

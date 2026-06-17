@@ -47,14 +47,18 @@ struct selfState_s {
   float velZAlpha;   // Blending factor to avoid vertical speed to accumulate error
   float estimatedVZ;
   // pyDrone altitude-hold handling: the SPL06 sits on the PCB top and its reading
-  // is corrupted by prop wash at low altitude. When altitude-hold is engaged we
-  // treat the current position as 0 and dead-reckon height from the accelerometer
-  // until we climb past baroHandoffM, then hand over to the (now reliable) baro.
-  float lastAsl;       // most recent baro asl (m), used to capture the reference
-  float aslRef;        // baro reference captured at engage / handoff (m)
-  float baroHandoffM;  // climb height at which we switch acc -> baro (m)
-  bool  holdEngaged;   // altitude-hold currently engaged
-  bool  accClimbMode;  // dead-reckoning the initial climb from the accelerometer
+  // is corrupted by prop wash at low altitude. When altitude-hold engages we treat
+  // the current position as 0, then run a TIME-BASED baro warm-up (ported from the
+  // mp-new firmware): for warmupTicks the baro is ignored (pure accelerometer), then
+  // its weight ramps in over softTicks. This avoids prop-wash pollution near the
+  // ground without the stall of distance-based dead-reckoning.
+  float lastAsl;        // most recent baro asl (m), used to capture the reference
+  float aslRef;         // baro reference captured at engage (m)
+  bool  holdEngaged;    // altitude-hold currently engaged
+  uint16_t warmupCount; // ticks remaining where baro is ignored (pure acc)
+  uint16_t softCount;   // ticks remaining of the baro weight soft-ramp
+  uint16_t warmupTicks; // warm-up length (ticks @100Hz). 90 = 0.9s
+  uint16_t softTicks;   // soft-ramp length (ticks @100Hz). 40 = 0.4s
 };
 
 static struct selfState_s state = {
@@ -73,9 +77,11 @@ static struct selfState_s state = {
   .estimatedVZ = 0.0f,
   .lastAsl = 0.0f,
   .aslRef = 0.0f,
-  .baroHandoffM = 0.6f,
   .holdEngaged = false,
-  .accClimbMode = false,
+  .warmupCount = 0,
+  .softCount = 0,
+  .warmupTicks = 90,   // 0.9s @100Hz: ignore baro after engage (prop-wash window)
+  .softTicks = 40,     // 0.4s @100Hz: ramp baro weight back in
 };
 
 static void positionEstimateInternal(state_t* estimate, const sensorData_t* sensorData, const tofMeasurement_t* tofMeasurement, float dt, uint32_t tick, struct selfState_s* state);
@@ -94,17 +100,19 @@ void positionUpdateVelocity(float accWZ, float dt) {
 // climb from the accelerometer (the baro is unreliable near the ground).
 void positionEstimatorAltitudeSetHoldEngaged(bool engaged) {
   if (engaged && !state.holdEngaged) {
-    // Treat the current position as 0 and start the complementary altitude
-    // filter from there (baro referenced to this point + acc velocity).
+    // Treat the current position as 0 and start the baro warm-up: ignore the baro
+    // for warmupTicks (pure accelerometer), then ramp its weight back in.
     state.holdEngaged = true;
-    state.accClimbMode = false;
     state.estimatedZ = 0.0f;
     state.velocityZ = 0.0f;
     state.aslRef = state.lastAsl;
-    DEBUG_PRINTI("ALT-HOLD engaged: zero here (aslRef=%.2f)", (double)state.aslRef);
+    state.warmupCount = state.warmupTicks;
+    state.softCount = 0;
+    DEBUG_PRINTI("ALT-HOLD engaged: zero here (aslRef=%.2f), baro warm-up", (double)state.aslRef);
   } else if (!engaged && state.holdEngaged) {
     state.holdEngaged = false;
-    state.accClimbMode = false;
+    state.warmupCount = 0;
+    state.softCount = 0;
     DEBUG_PRINTI("ALT-HOLD disengaged");
   }
 }
@@ -146,19 +154,30 @@ static void positionEstimateInternal(state_t* estimate, const sensorData_t* sens
       }
       state->estimatedZ = filteredZ + (state->velocityFactor * state->velocityZ * dt);
     } else {
-      // Engaged: hold altitude RELATIVE to the engage point. Complementary filter:
-      // baro (referenced to the engage altitude) gives the absolute reference, acc
-      // velocity gives the fast response. The heavy IIR smooths prop-wash noise.
-      //
-      // NOTE: pure accelerometer dead-reckoning for the initial climb was tried but
-      // it stalls on a steady climb (acc ~= 0, leaky integrator decays the velocity,
-      // no absolute reference) so the estimate never rises and the craft climbs away
-      // to the ceiling. Keeping the baro in the loop avoids that.
+      // Engaged: hold altitude RELATIVE to the engage point. Complementary filter
+      // of baro (absolute reference) + acc velocity (fast response), but the baro
+      // WEIGHT is staged to dodge prop-wash pollution near the ground (ported from
+      // mp-new), and is TIME-based (not distance-based) so it can't stall:
+      //   warm-up : baro weight 0 -> pure accelerometer for warmupTicks
+      //   soft    : weight ramps 0 -> (1-estAlphaAsl) over softTicks
+      //   normal  : weight = (1-estAlphaAsl)
       float baroRel = sensorData->baro.asl - state->aslRef;
-      filteredZ = (state->estAlphaAsl       ) * state->estimatedZ +
-                  (1.0f - state->estAlphaAsl) * baroRel;
+      float baroW;
+      if (state->warmupCount > 0) {
+        state->warmupCount--;
+        baroW = 0.0f;                                   // ignore baro (prop-wash window)
+        if (state->warmupCount == 0) {
+          state->softCount = state->softTicks;          // start ramping baro back in
+        }
+      } else if (state->softCount > 0) {
+        state->softCount--;
+        float ramp = 1.0f - (float)state->softCount / (float)state->softTicks; // 0 -> 1
+        baroW = (1.0f - state->estAlphaAsl) * ramp;
+      } else {
+        baroW = (1.0f - state->estAlphaAsl);            // steady state
+      }
+      filteredZ = (1.0f - baroW) * state->estimatedZ + baroW * baroRel;
       state->estimatedZ = filteredZ + (state->velocityFactor * state->velocityZ * dt);
-      state->accClimbMode = false;
     }
   }
 
@@ -179,7 +198,7 @@ LOG_GROUP_START(posEstAlt)
 LOG_ADD(LOG_FLOAT, estimatedZ, &state.estimatedZ)
 LOG_ADD(LOG_FLOAT, estVZ, &state.estimatedVZ)
 LOG_ADD(LOG_FLOAT, velocityZ, &state.velocityZ)
-LOG_ADD(LOG_UINT8, accClimb, &state.accClimbMode)
+LOG_ADD(LOG_UINT16, warmup, &state.warmupCount)
 LOG_ADD(LOG_UINT8, holdEng, &state.holdEngaged)
 LOG_GROUP_STOP(posEstAlt)
 
@@ -189,5 +208,6 @@ PARAM_ADD(PARAM_FLOAT, estAlphaZr, &state.estAlphaZrange)
 PARAM_ADD(PARAM_FLOAT, velFactor, &state.velocityFactor)
 PARAM_ADD(PARAM_FLOAT, velZAlpha, &state.velZAlpha)
 PARAM_ADD(PARAM_FLOAT, vAccDeadband, &state.vAccDeadband)
-PARAM_ADD(PARAM_FLOAT, baroHandoffM, &state.baroHandoffM)
+PARAM_ADD(PARAM_UINT16, warmupTicks, &state.warmupTicks)
+PARAM_ADD(PARAM_UINT16, softTicks, &state.softTicks)
 PARAM_GROUP_STOP(posEstAlt)
